@@ -80,6 +80,9 @@ class CollectorIngestTest extends TestCase
             'timeframe' => 'H1',
             'status' => 'COMMITTED',
         ]);
+
+        // DATA-01: Exactly one logical outbox event generated
+        $this->assertEquals(1, \App\Domain\MarketData\Models\OutboxEvent::where('event_type', 'CandleBatchCommitted')->count());
     }
 
     public function test_idempotent_duplicate_batch_returns_same_receipt_data_02(): void
@@ -107,8 +110,9 @@ class CollectorIngestTest extends TestCase
         $res2->assertStatus(201);
         $this->assertEquals($receiptId1, $res2->json('receipt_id'));
 
-        // Only one batch recorded
+        // Only one batch recorded and only one outbox event (DATA-02)
         $this->assertEquals(1, \App\Domain\MarketData\Models\IngestBatch::where('idempotency_key', $idempotencyKey)->count());
+        $this->assertEquals(1, \App\Domain\MarketData\Models\OutboxEvent::where('event_type', 'CandleBatchCommitted')->count());
     }
 
     public function test_idempotency_conflict_returns_409_data_03(): void

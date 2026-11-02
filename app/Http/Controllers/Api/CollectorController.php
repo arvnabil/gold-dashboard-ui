@@ -187,6 +187,13 @@ class CollectorController extends Controller
                 'status' => 'COMMITTED',
             ]);
 
+            \App\Domain\MarketData\Models\OutboxEvent::create([
+                'aggregate_id' => $receiptId,
+                'event_type' => 'CandleBatchCommitted',
+                'feed_id' => $feedId,
+                'payload' => $receiptPayload,
+            ]);
+
             return $receiptPayload;
         });
 

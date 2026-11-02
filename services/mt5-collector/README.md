@@ -11,3 +11,4 @@ This dedicated Python service runs natively on Windows where MetaTrader 5 termin
 
 ## Strict Hard Invariant
 - **READ-ONLY / TELEMETRY ONLY**: No order execution (`OrderSend`, `order_send`), position modification, or trading commands are present or permitted.
+

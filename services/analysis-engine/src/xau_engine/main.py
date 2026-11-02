@@ -54,3 +54,4 @@ def evaluate_snapshot(request: SnapshotEvaluationRequest):
         "zones": [],
         "setups": []
     }
+
