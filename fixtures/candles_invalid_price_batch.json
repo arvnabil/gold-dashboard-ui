@@ -1,0 +1,29 @@
+{
+  "feed_id": "00000000-0000-0000-0000-000000000001",
+  "timeframe": "H1",
+  "candles": [
+    {
+      "opened_at": "2026-11-02T04:00:00Z",
+      "closed_at": "2026-11-02T05:00:00Z",
+      "open": "2730.50",
+      "high": "2738.20",
+      "low": "2728.10",
+      "close": "2736.80",
+      "tick_volume": 4210,
+      "spread": 12,
+      "is_closed": true
+    },
+    {
+      "opened_at": "2026-11-02T05:00:00Z",
+      "closed_at": "2026-11-02T06:00:00Z",
+      "open": "2736.80",
+      "high": "2735.00",
+      "low": "2740.00",
+      "close": "2741.20",
+      "tick_volume": 5830,
+      "spread": 11,
+      "is_closed": true
+    }
+  ]
+}
+

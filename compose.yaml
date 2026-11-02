@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: xau_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-xau_analyst}
+      POSTGRES_USER: ${DB_USERNAME:-xau_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret_change_me}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-testing-db.sh:/docker-entrypoint-initdb.d/init-testing-db.sh:ro
+    networks:
+      - xau_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-xau_user} -d ${DB_DATABASE:-xau_analyst}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: xau_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_change_me}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - xau_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_change_me}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  analysis-engine:
+    build:
+      context: ./services/analysis-engine
+      dockerfile: Dockerfile
+    container_name: xau_analysis_engine
+    restart: unless-stopped
+    environment:
+      - ENGINE_PORT=8000
+      - ENGINE_INTERNAL_TOKEN=${ENGINE_INTERNAL_TOKEN:-engine_dev_token}
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - xau_network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  xau_network:
+    driver: bridge
+

@@ -1,0 +1,536 @@
+openapi: 3.1.0
+info:
+  title: XAUUSD AI Hybrid Analyst API
+  version: 1.0.0
+  description: Contract specification for XAUUSD multi-timeframe analysis, ingestion, and dashboard data.
+servers:
+  - url: /api/v1
+    description: API v1 endpoint root
+
+paths:
+  /collector/batches:
+    post:
+      summary: Ingest closed candle batch from MT5 collector
+      operationId: ingestCandleBatch
+      security:
+        - CollectorBearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandleBatchRequest'
+      responses:
+        '201':
+          description: Batch accepted and committed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchReceiptResponse'
+        '409':
+          description: Idempotency conflict (same key, different payload hash)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error in candle sequence or price ordering
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /collector/quotes:
+    post:
+      summary: Ingest recent quote sequence
+      operationId: ingestQuotes
+      security:
+        - CollectorBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteIngestRequest'
+      responses:
+        '200':
+          description: Quotes processed
+        '422':
+          description: Invalid quote structure
+
+  /collector/heartbeat:
+    post:
+      summary: Report collector health telemetry and clock sync
+      operationId: collectorHeartbeat
+      security:
+        - CollectorBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+
+  /feeds/{id}/overview:
+    get:
+      summary: Get overview metrics, feed health, latest quote, and bias
+      operationId: getFeedOverview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Feed overview data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedOverviewResponse'
+
+  /feeds/{id}/candles:
+    get:
+      summary: Get closed candle history for a given timeframe
+      operationId: getFeedCandles
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timeframe
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [M1, M5, M15, H1, H4, D1]
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2000
+            default: 300
+      responses:
+        '200':
+          description: Candle list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandleListResponse'
+
+  /feeds/{id}/zones:
+    get:
+      summary: Get identified SMC / SNR / SND zones
+      operationId: getFeedZones
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, mitigated, invalidated, all]
+      responses:
+        '200':
+          description: Zone items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneListResponse'
+
+  /feeds/{id}/setups:
+    get:
+      summary: Get active and recent trade setups
+      operationId: getFeedSetups
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Setups list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupListResponse'
+
+  /system/health:
+    get:
+      summary: Get system health, feed status, and background process statuses
+      operationId: getSystemHealth
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealthResponse'
+
+components:
+  securitySchemes:
+    CollectorBearerAuth:
+      type: http
+      scheme: bearer
+      description: Scoped collector bearer token
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - request_id
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+
+    CandleItem:
+      type: object
+      required:
+        - opened_at
+        - closed_at
+        - open
+        - high
+        - low
+        - close
+        - tick_volume
+        - spread
+        - is_closed
+      properties:
+        opened_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+        open:
+          type: string
+        high:
+          type: string
+        low:
+          type: string
+        close:
+          type: string
+        tick_volume:
+          type: integer
+        spread:
+          type: integer
+        is_closed:
+          type: boolean
+
+    CandleBatchRequest:
+      type: object
+      required:
+        - feed_id
+        - timeframe
+        - candles
+      properties:
+        feed_id:
+          type: string
+          format: uuid
+        timeframe:
+          type: string
+          enum: [M1, M5, M15, H1, H4, D1]
+        candles:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/CandleItem'
+
+    BatchReceiptResponse:
+      type: object
+      required:
+        - receipt_id
+        - feed_id
+        - timeframe
+        - accepted_count
+        - committed_at
+      properties:
+        receipt_id:
+          type: string
+          format: uuid
+        feed_id:
+          type: string
+          format: uuid
+        timeframe:
+          type: string
+        accepted_count:
+          type: integer
+        committed_at:
+          type: string
+          format: date-time
+
+    QuoteIngestRequest:
+      type: object
+      required:
+        - feed_id
+        - quotes
+      properties:
+        feed_id:
+          type: string
+          format: uuid
+        quotes:
+          type: array
+          items:
+            type: object
+            required:
+              - source_time
+              - bid
+              - ask
+              - sequence
+            properties:
+              source_time:
+                type: string
+                format: date-time
+              bid:
+                type: string
+              ask:
+                type: string
+              sequence:
+                type: integer
+
+    HeartbeatRequest:
+      type: object
+      required:
+        - collector_id
+        - feed_id
+        - terminal_connected
+        - quote_lag_ms
+        - sent_at
+      properties:
+        collector_id:
+          type: string
+        feed_id:
+          type: string
+          format: uuid
+        terminal_connected:
+          type: boolean
+        quote_lag_ms:
+          type: integer
+        sent_at:
+          type: string
+          format: date-time
+
+    HeartbeatResponse:
+      type: object
+      required:
+        - status
+        - acknowledged_at
+      properties:
+        status:
+          type: string
+          enum: [OK, DESYNC]
+        acknowledged_at:
+          type: string
+          format: date-time
+
+    FeedOverviewResponse:
+      type: object
+      required:
+        - feed_id
+        - symbol
+        - broker
+        - health_status
+        - latest_quote
+      properties:
+        feed_id:
+          type: string
+          format: uuid
+        symbol:
+          type: string
+        broker:
+          type: string
+        health_status:
+          type: string
+          enum: [LIVE, STALE, DEGRADED, DISCONNECTED, WARMING_UP, MARKET_CLOSED]
+        latest_quote:
+          type: object
+          properties:
+            bid:
+              type: string
+            ask:
+              type: string
+            spread_points:
+              type: integer
+            quote_time:
+              type: string
+              format: date-time
+
+    CandleListResponse:
+      type: object
+      required:
+        - feed_id
+        - timeframe
+        - data
+      properties:
+        feed_id:
+          type: string
+        timeframe:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandleItem'
+
+    ZoneListResponse:
+      type: object
+      required:
+        - feed_id
+        - zones
+      properties:
+        feed_id:
+          type: string
+        zones:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - timeframe
+              - type
+              - direction
+              - low
+              - high
+              - lifecycle
+            properties:
+              id:
+                type: string
+              timeframe:
+                type: string
+              type:
+                type: string
+                enum: [SMC_ORDER_BLOCK, SMC_FVG, SNR_SUPPORT, SNR_RESISTANCE, SND_DEMAND, SND_SUPPLY]
+              direction:
+                type: string
+                enum: [BULLISH, BEARISH]
+              low:
+                type: string
+              high:
+                type: string
+              lifecycle:
+                type: string
+                enum: [ACTIVE, MITIGATED, INVALIDATED]
+
+    SetupListResponse:
+      type: object
+      required:
+        - feed_id
+        - setups
+      properties:
+        feed_id:
+          type: string
+        setups:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - direction
+              - state
+              - score
+              - entry
+              - stop
+              - target
+            properties:
+              id:
+                type: string
+              direction:
+                type: string
+                enum: [BUY, SELL]
+              state:
+                type: string
+                enum: [PROPOSED, READY, TRIGGERED, INVALIDATED, EXPIRED]
+              score:
+                type: number
+              entry:
+                type: string
+              stop:
+                type: string
+              target:
+                type: string
+
+    SystemHealthResponse:
+      type: object
+      required:
+        - overall_status
+        - database
+        - redis
+        - feeds
+      properties:
+        overall_status:
+          type: string
+          enum: [HEALTHY, DEGRADED, CRITICAL]
+        database:
+          type: string
+        redis:
+          type: string
+        feeds:
+          type: array
+          items:
+            type: object
+            required:
+              - feed_id
+              - status
+              - last_heartbeat
+            properties:
+              feed_id:
+                type: string
+              status:
+                type: string
+              last_heartbeat:
+                type: string
+                format: date-time
+
